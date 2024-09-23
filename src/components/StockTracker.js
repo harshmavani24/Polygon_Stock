@@ -2188,6 +2188,429 @@
 // export default StockOptionsTracker;
 
 
+// last given result of server uploaded data on stock.nuviontech.com:3000 
+
+// import React, { useState, useEffect } from 'react';
+// import axios from 'axios';
+// import { Line, Bar } from 'react-chartjs-2';
+// import 'chart.js/auto';
+
+// const StockOptionsTracker = () => {
+//   const [stockSymbol, setStockSymbol] = useState('AAPL'); // Default stock symbol
+//   const [stockPrice, setStockPrice] = useState(0); // Latest stock price
+//   const [stockData, setStockData] = useState([]); // Stock price data
+//   const [optionContracts, setOptionContracts] = useState([]); // Option contracts data
+//   const [putsVolumes, setPutsVolumes] = useState([]); // Cumulative puts volume data
+//   const [callsVolumes, setCallsVolumes] = useState([]); // Cumulative calls volume data
+//   const [timeLabels, setTimeLabels] = useState([]); // X-axis labels (time)
+//   const [isDollarMode, setIsDollarMode] = useState(false); // Toggle between volume and dollar amount
+//   const [loading, setLoading] = useState(false);
+//   const [error, setError] = useState(null);
+
+//   const polygonApiKey = '_grbZQMP5kasPyiTvmUtApzQ5dapTGSu'; // Replace with your API key
+
+//   // Fetch stock data and options contracts
+//   useEffect(() => {
+//     const fetchStockDataAndOptions = async () => {
+//       setLoading(true);
+//       setError(null);
+//       try {
+//         // Fetch stock data for the latest price
+//         const stockResponse = await axios.get(
+//           `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${stockSymbol}?apiKey=${polygonApiKey}`
+//         );
+//         const currentPrice = stockResponse.data.ticker.lastTrade.p;
+//         setStockPrice(currentPrice);
+
+//         // Fetch stock price data for charting
+//         const stockPriceResponse = await axios.get(
+//           `https://api.polygon.io/v2/aggs/ticker/${stockSymbol}/range/1/minute/2024-09-20/${getTodayDate()}?adjusted=true&sort=asc&apiKey=${polygonApiKey}`
+//         );
+//         setStockData(stockPriceResponse.data.results || []);
+
+//         // Fetch options data dynamically based on stock's current price
+//         const strikesResponse = await axios.get(
+//           `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${stockSymbol}&apiKey=${polygonApiKey}`
+//         );
+
+//         const expirationDate = '2024-09-27'; // Example expiration date
+//         const soonestExpiry = strikesResponse.data.results.reduce((prev, curr) => {
+//             return new Date(curr.expiration_date) < new Date(prev.expiration_date) ? curr : prev;
+//         }, strikesResponse.data.results[0]).expiration_date;
+
+//         const strikesForExpiry = strikesResponse.data.results.filter(
+//             contract => contract.expiration_date === soonestExpiry
+            
+//         );
+//         const strikes = strikesForExpiry.map(contract => contract.strike_price);
+
+//         console.log('All Strikes:', strikes); // Log all strikes
+//         // Find 10 strikes closest to the current price (5 above and 5 below)
+//         const closestStrikes = strikes.sort((a, b) => Math.abs(a - currentPrice) - Math.abs(b - currentPrice)).slice(0, 10); // Select the closest 10 strikes
+
+//         console.log('Closest Strikes:', closestStrikes); // Log closest strikes
+
+
+//         // Fetch option volumes for these strikes
+//         const volumePromises = closestStrikes.flatMap(strike =>
+//           ['call', 'put'].map(async (contractType) => {
+//             const response = await axios.get(
+//               `https://api.polygon.io/v3/snapshot/options/${stockSymbol}?strike_price=${strike}&expiration_date=${expirationDate}&contract_type=${contractType}&order=asc&limit=10&sort=strike_price&apiKey=${polygonApiKey}`
+//             );
+//             return response.data.results || [];
+//           })
+//         );
+
+//         // Wait for all promises to resolve
+//         const allVolumes = await Promise.all(volumePromises);
+//         console.log('All Volumes:', allVolumes); // Log all volumes
+
+//         // Process the data to accumulate volumes
+//         const puts = [];
+//         const calls = [];
+//         let timeLabels = [];
+
+//         allVolumes.forEach((resultList) => {
+//           resultList.forEach(contract => {
+//             if (contract.details.contract_type === 'put') {
+//               puts.push(contract.day.volume);
+//             } else if (contract.details.contract_type === 'call') {
+//               calls.push(contract.day.volume);
+//             }
+
+//             if (timeLabels.length === 0 && contract.day.last_updated) {
+//               const timestamp = contract.day.last_updated / 1e9; // Convert nanoseconds to seconds
+//               timeLabels.push(new Date(timestamp * 1000).toLocaleTimeString());
+//             }
+//           });
+//         });
+//         for (let i = 0; i < 10; i++) {
+//             if (puts[i] === undefined) {
+//                 puts[i] = 0;
+//             }
+//         }
+//         for (let i = 0; i < 10; i++) {
+//             if (calls[i] === undefined) {
+//                 calls[i] = 0;
+//             }
+//         }
+//         for (let i = 1; i < 10; i++) {
+//             puts[0] = puts[0] + puts[i];
+//             calls[0] = calls[0] + calls[i];
+//         }
+//         console.log('Puts:', puts); // Log puts
+//         console.log('Calls:', calls); // Log calls
+
+//         setPutsVolumes(puts);
+//         setCallsVolumes(calls);
+//         setTimeLabels(timeLabels);
+
+//       } catch (err) {
+//         console.error('Error fetching data:', err);
+//         setError('Failed to load data');
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchStockDataAndOptions();
+
+//     const interval = setInterval(() => {
+//       fetchStockDataAndOptions();
+//     }, 60000); // Update every 60 seconds
+
+//     return () => clearInterval(interval);
+//   }, [stockSymbol]);
+
+
+//   // Helper function to get today’s date
+//   const getTodayDate = () => {
+//     const today = new Date();
+//     return today.toISOString().split('T')[0];
+//   };
+
+//   // Line chart data for stock price
+//   const stockChartData = {
+//     labels: stockData.map((item) => new Date(item.t).toLocaleTimeString()), // X-axis (time)
+//     datasets: [
+//       {
+//         label: 'Stock Price',
+//         data: stockData.map((item) => item.c), // Y-axis (stock price)
+//         borderColor: 'rgba(75,192,192,1)',
+//         backgroundColor: 'rgba(75,192,192,0.2)',
+//         fill: false,
+//         tension: 0.1,
+//       },
+//     ],
+//   };
+
+//   // Bar chart data for cumulative options volume
+//   const optionsVolumeChartData = {
+//     labels: timeLabels, // X-axis (time)
+//     datasets: [
+//       {
+//         label: isDollarMode ? 'Cumulative Dollar Amount' : 'Cumulative Volume (Puts)',
+//         data: putsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
+//         backgroundColor: 'rgba(255, 99, 132, 0.6)',
+//         borderColor: 'rgba(255, 99, 132, 1)',
+//         borderWidth: 1,
+//       },
+//       {
+//         label: isDollarMode ? 'Cumulative Dollar Amount' : 'Cumulative Volume (Calls)',
+//         data: callsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
+//         backgroundColor: 'rgba(54, 162, 235, 0.6)',
+//         borderColor: 'rgba(54, 162, 235, 1)',
+//         borderWidth: 1,
+//       },
+//     ],
+//   };
+
+//   return (
+//     <div style={{ padding: '20px' }}>
+//       <h2>Stock and Options Tracker</h2>
+
+//       <div style={{ marginBottom: '20px' }}>
+//         <label>
+//           Stock Symbol:
+//           <input
+//             type="text"
+//             value={stockSymbol}
+//             onChange={(e) => setStockSymbol(e.target.value.toUpperCase())}
+//             style={{ marginLeft: '10px' }}
+//           />
+//         </label>
+//       </div>
+
+//       <button onClick={() => setIsDollarMode(!isDollarMode)}>
+//         {isDollarMode ? 'Switch to Volume' : 'Switch to Dollar Amount'}
+//       </button>
+
+//       {loading && <p>Loading data...</p>}
+//       {error && <p style={{ color: 'red' }}>{error}</p>}
+
+//       <div style={{ marginTop: '30px' }}>
+//         <h3>Stock Price Data for {stockSymbol}</h3>
+//         {stockData.length > 0 ? <Line data={stockChartData} /> : <p>No stock data available</p>}
+
+//         <h3 style={{ marginTop: '40px' }}>Options Cumulative Volume for Nearest Expiry</h3>
+//         {putsVolumes.length > 0 || callsVolumes.length > 0 ? (
+//           <Bar data={optionsVolumeChartData} />
+//         ) : (
+//           <p>No cumulative volume data available</p>
+//         )}
+        
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default StockOptionsTracker;
+
+// import React, { useState, useEffect } from 'react';
+// import axios from 'axios';
+// import { Line, Bar } from 'react-chartjs-2';
+// import 'chart.js/auto';
+
+// const StockOptionsTracker = () => {
+//   const [stockSymbol, setStockSymbol] = useState('AAPL'); // Default stock symbol
+//   const [stockPrice, setStockPrice] = useState(0); // Latest stock price
+//   const [stockData, setStockData] = useState([]); // Stock price data
+//   const [strikes, setStrikes] = useState([]); // Strike prices
+//   const [putsVolumes, setPutsVolumes] = useState([]); // Puts volume data per strike
+//   const [callsVolumes, setCallsVolumes] = useState([]); // Calls volume data per strike
+//   const [isDollarMode, setIsDollarMode] = useState(false); // Toggle between volume and dollar amount
+//   const [loading, setLoading] = useState(false);
+//   const [error, setError] = useState(null);
+//   const polygonApiKey = '_grbZQMP5kasPyiTvmUtApzQ5dapTGSu'; // Replace with your API key
+
+//   // Fetch stock data and options contracts
+//   useEffect(() => {
+//     const fetchStockDataAndOptions = async () => {
+//       setLoading(true);
+//       setError(null);
+//       try {
+//         // Fetch stock data for the latest price
+//         const stockResponse = await axios.get(
+//           `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${stockSymbol}?apiKey=${polygonApiKey}`
+//         );
+//         const currentPrice = stockResponse.data.ticker.lastTrade.p;
+//         setStockPrice(currentPrice);
+
+//         // Fetch stock price data for charting
+//         const stockPriceResponse = await axios.get(
+//           `https://api.polygon.io/v2/aggs/ticker/${stockSymbol}/range/1/minute/2024-09-20/${getTodayDate()}?adjusted=true&sort=asc&apiKey=${polygonApiKey}`
+//         );
+//         setStockData(stockPriceResponse.data.results || []);
+
+//         // Fetch options data dynamically based on stock's current price
+//         const strikesResponse = await axios.get(
+//           `https://api.polygon.io/v3/reference/options/contracts?underlying_ticker=${stockSymbol}&apiKey=${polygonApiKey}`
+//         );
+
+//         const expirationDate = '2024-09-27'; // Example expiration date
+//         const soonestExpiry = strikesResponse.data.results.reduce((prev, curr) => {
+//           return new Date(curr.expiration_date) < new Date(prev.expiration_date) ? curr : prev;
+//         }, strikesResponse.data.results[0]).expiration_date;
+
+//         const strikesForExpiry = strikesResponse.data.results.filter(
+//           contract => contract.expiration_date === soonestExpiry
+//         );
+//         const allStrikes = strikesForExpiry.map(contract => contract.strike_price);
+
+//         // Find 10 strikes closest to the current price (5 above and 5 below)
+//         const closestStrikes = allStrikes.sort((a, b) => Math.abs(a - currentPrice) - Math.abs(b - currentPrice)).slice(0, 10);
+
+//         console.log('Closest Strikes:', closestStrikes); // Log closest strikes
+//         // Fetch option volumes for these strikes
+//         const volumePromises = closestStrikes.flatMap(strike =>
+//           ['call', 'put'].map(async (contractType) => {
+//             const response = await axios.get(
+//               `https://api.polygon.io/v3/snapshot/options/${stockSymbol}?strike_price=${strike}&expiration_date=${expirationDate}&contract_type=${contractType}&order=asc&limit=10&sort=strike_price&apiKey=${polygonApiKey}`
+//             );
+//             return response.data.results || [];
+//           })
+//         );
+
+//         const allVolumes = await Promise.all(volumePromises);
+
+//         const puts = [];
+//         const calls = [];
+//         const strikePrices = [];
+
+//         allVolumes.forEach((resultList, index) => {
+//             puts[index] = 0;  // Default volume is 0
+//             calls[index] = 0; // Default volume is 0
+
+//           resultList.forEach(contract => {
+//             if (contract.details.contract_type === 'put') {
+//               puts[index] = contract.day.volume || 0;
+//             } else if (contract.details.contract_type === 'call') {
+//               calls[index] = contract.day.volume || 0;
+//             }
+//             strikePrices[index] = contract.details.strike_price; // Store the strike price
+//           });
+//         });
+//         console.log('All Volumes:', allVolumes); // Log all volumes
+//         console.log('Puts:', puts); // Log puts
+//         console.log('Calls:', calls); // Log calls
+
+//         setPutsVolumes(puts);
+//         setCallsVolumes(calls);
+//         setStrikes(strikePrices);
+
+//       } catch (err) {
+//         console.error('Error fetching data:', err);
+//         setError('Failed to load data');
+//       } finally {
+//         setLoading(false);
+//       }
+//     };
+
+//     fetchStockDataAndOptions();
+
+//     const interval = setInterval(() => {
+//       fetchStockDataAndOptions();
+//     }, 60000); // Update every 60 seconds
+
+//     return () => clearInterval(interval);
+//   }, [stockSymbol]);
+
+//   // Helper function to get today’s date
+//   const getTodayDate = () => {
+//     const today = new Date();
+//     return today.toISOString().split('T')[0];
+//   };
+
+//   // Line chart data for stock price
+//   const stockChartData = {
+//     labels: stockData.map((item) => new Date(item.t).toLocaleTimeString()), // X-axis (time)
+//     datasets: [
+//       {
+//         label: 'Stock Price',
+//         data: stockData.map((item) => item.c), // Y-axis (stock price)
+//         borderColor: 'rgba(75,192,192,1)',
+//         backgroundColor: 'rgba(75,192,192,0.2)',
+//         fill: false,
+//         tension: 0.1,
+//       },
+//     ],
+//   };
+
+//   // Bar chart data for puts volume
+//   const putsVolumeChartData = {
+//     labels: strikes, // X-axis (strike prices)
+//     datasets: [
+//       {
+//         label: isDollarMode ? 'Puts Dollar Amount' : 'Puts Volume',
+//         data: putsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
+//         backgroundColor: 'rgba(255, 99, 132, 0.6)',
+//         borderColor: 'rgba(255, 99, 132, 1)',
+//         borderWidth: 1,
+//       },
+//     ],
+//   };
+
+//   // Bar chart data for calls volume
+//   const callsVolumeChartData = {
+//     labels: strikes, // X-axis (strike prices)
+//     datasets: [
+//       {
+//         label: isDollarMode ? 'Calls Dollar Amount' : 'Calls Volume',
+//         data: callsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
+//         backgroundColor: 'rgba(54, 162, 235, 0.6)',
+//         borderColor: 'rgba(54, 162, 235, 1)',
+//         borderWidth: 1,
+//       },
+//     ],
+//   };
+
+//   return (
+//     <div style={{ padding: '20px' }}>
+//       <h2>Stock and Options Tracker</h2>
+
+//       <div style={{ marginBottom: '20px' }}>
+//         <label>
+//           Stock Symbol:
+//           <input
+//             type="text"
+//             value={stockSymbol}
+//             onChange={(e) => setStockSymbol(e.target.value.toUpperCase())}
+//             style={{ marginLeft: '10px' }}
+//           />
+//         </label>
+//       </div>
+
+//       <button onClick={() => setIsDollarMode(!isDollarMode)}>
+//         {isDollarMode ? 'Switch to Volume' : 'Switch to Dollar Amount'}
+//       </button>
+
+//       {loading && <p>Loading data...</p>}
+//       {error && <p style={{ color: 'red' }}>{error}</p>}
+
+//       <div style={{ marginTop: '30px' }}>
+//         <h3>Stock Price Data for {stockSymbol}</h3>
+//         {stockData.length > 0 ? <Line data={stockChartData} /> : <p>No stock data available</p>}
+
+//         <h3 style={{ marginTop: '40px' }}>Puts Volume by Strike Price</h3>
+//         {putsVolumes.length > 0 ? (
+//           <Bar data={putsVolumeChartData} />
+//         ) : (
+//           <p>No puts volume data available</p>
+//         )}
+
+//         <h3 style={{ marginTop: '40px' }}>Calls Volume by Strike Price</h3>
+//         {callsVolumes.length > 0 ? (
+//           <Bar data={callsVolumeChartData} />
+//         ) : (
+//           <p>No calls volume data available</p>
+//         )}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default StockOptionsTracker;
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Line, Bar } from 'react-chartjs-2';
@@ -2197,14 +2620,12 @@ const StockOptionsTracker = () => {
   const [stockSymbol, setStockSymbol] = useState('AAPL'); // Default stock symbol
   const [stockPrice, setStockPrice] = useState(0); // Latest stock price
   const [stockData, setStockData] = useState([]); // Stock price data
-  const [optionContracts, setOptionContracts] = useState([]); // Option contracts data
-  const [putsVolumes, setPutsVolumes] = useState([]); // Cumulative puts volume data
-  const [callsVolumes, setCallsVolumes] = useState([]); // Cumulative calls volume data
-  const [timeLabels, setTimeLabels] = useState([]); // X-axis labels (time)
+  const [strikes, setStrikes] = useState([]); // Unique strike prices
+  const [putsVolumes, setPutsVolumes] = useState([]); // Puts volume data per strike
+  const [callsVolumes, setCallsVolumes] = useState([]); // Calls volume data per strike
   const [isDollarMode, setIsDollarMode] = useState(false); // Toggle between volume and dollar amount
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
   const polygonApiKey = '_grbZQMP5kasPyiTvmUtApzQ5dapTGSu'; // Replace with your API key
 
   // Fetch stock data and options contracts
@@ -2233,21 +2654,18 @@ const StockOptionsTracker = () => {
 
         const expirationDate = '2024-09-27'; // Example expiration date
         const soonestExpiry = strikesResponse.data.results.reduce((prev, curr) => {
-            return new Date(curr.expiration_date) < new Date(prev.expiration_date) ? curr : prev;
+          return new Date(curr.expiration_date) < new Date(prev.expiration_date) ? curr : prev;
         }, strikesResponse.data.results[0]).expiration_date;
 
         const strikesForExpiry = strikesResponse.data.results.filter(
-            contract => contract.expiration_date === soonestExpiry
-            
+          contract => contract.expiration_date === soonestExpiry
         );
-        const strikes = strikesForExpiry.map(contract => contract.strike_price);
+        const allStrikes = strikesForExpiry.map(contract => contract.strike_price);
 
-        console.log('All Strikes:', strikes); // Log all strikes
-        // Find 10 strikes closest to the current price (5 above and 5 below)
-        const closestStrikes = strikes.sort((a, b) => Math.abs(a - currentPrice) - Math.abs(b - currentPrice)).slice(0, 10); // Select the closest 10 strikes
-
-        console.log('Closest Strikes:', closestStrikes); // Log closest strikes
-
+        // Find 10 unique strikes closest to the current price (5 above and 5 below)
+        const closestStrikes = [...new Set(allStrikes)]
+          .sort((a, b) => Math.abs(a - currentPrice) - Math.abs(b - currentPrice))
+          .slice(0, 10);
 
         // Fetch option volumes for these strikes
         const volumePromises = closestStrikes.flatMap(strike =>
@@ -2259,49 +2677,27 @@ const StockOptionsTracker = () => {
           })
         );
 
-        // Wait for all promises to resolve
         const allVolumes = await Promise.all(volumePromises);
-        console.log('All Volumes:', allVolumes); // Log all volumes
 
-        // Process the data to accumulate volumes
-        const puts = [];
-        const calls = [];
-        let timeLabels = [];
+        const puts = Array(closestStrikes.length).fill(0);  // Initialize volumes with 0
+        const calls = Array(closestStrikes.length).fill(0);
 
-        allVolumes.forEach((resultList) => {
+        allVolumes.forEach(resultList => {
           resultList.forEach(contract => {
-            if (contract.details.contract_type === 'put') {
-              puts.push(contract.day.volume);
-            } else if (contract.details.contract_type === 'call') {
-              calls.push(contract.day.volume);
-            }
-
-            if (timeLabels.length === 0 && contract.day.last_updated) {
-              const timestamp = contract.day.last_updated / 1e9; // Convert nanoseconds to seconds
-              timeLabels.push(new Date(timestamp * 1000).toLocaleTimeString());
+            const strikeIndex = closestStrikes.indexOf(contract.details.strike_price);
+            if (strikeIndex !== -1) {
+              if (contract.details.contract_type === 'put') {
+                puts[strikeIndex] = contract.day.volume || 0;
+              } else if (contract.details.contract_type === 'call') {
+                calls[strikeIndex] = contract.day.volume || 0;
+              }
             }
           });
         });
-        for (let i = 0; i < 10; i++) {
-            if (puts[i] === undefined) {
-                puts[i] = 0;
-            }
-        }
-        for (let i = 0; i < 10; i++) {
-            if (calls[i] === undefined) {
-                calls[i] = 0;
-            }
-        }
-        for (let i = 1; i < 10; i++) {
-            puts[0] = puts[0] + puts[i];
-            calls[0] = calls[0] + calls[i];
-        }
-        console.log('Puts:', puts); // Log puts
-        console.log('Calls:', calls); // Log calls
 
         setPutsVolumes(puts);
         setCallsVolumes(calls);
-        setTimeLabels(timeLabels);
+        setStrikes(closestStrikes); // Ensure unique strike prices
 
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -2319,7 +2715,6 @@ const StockOptionsTracker = () => {
 
     return () => clearInterval(interval);
   }, [stockSymbol]);
-
 
   // Helper function to get today’s date
   const getTodayDate = () => {
@@ -2342,19 +2737,26 @@ const StockOptionsTracker = () => {
     ],
   };
 
-  // Bar chart data for cumulative options volume
-  const optionsVolumeChartData = {
-    labels: timeLabels, // X-axis (time)
+  // Bar chart data for puts volume
+  const putsVolumeChartData = {
+    labels: strikes, // X-axis (strike prices)
     datasets: [
       {
-        label: isDollarMode ? 'Cumulative Dollar Amount' : 'Cumulative Volume (Puts)',
+        label: isDollarMode ? 'Puts Dollar Amount' : 'Puts Volume',
         data: putsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
         backgroundColor: 'rgba(255, 99, 132, 0.6)',
         borderColor: 'rgba(255, 99, 132, 1)',
         borderWidth: 1,
       },
+    ],
+  };
+
+  // Bar chart data for calls volume
+  const callsVolumeChartData = {
+    labels: strikes, // X-axis (strike prices)
+    datasets: [
       {
-        label: isDollarMode ? 'Cumulative Dollar Amount' : 'Cumulative Volume (Calls)',
+        label: isDollarMode ? 'Calls Dollar Amount' : 'Calls Volume',
         data: callsVolumes.map((volume) => (isDollarMode ? volume * 100 * stockPrice : volume)),
         backgroundColor: 'rgba(54, 162, 235, 0.6)',
         borderColor: 'rgba(54, 162, 235, 1)',
@@ -2390,12 +2792,25 @@ const StockOptionsTracker = () => {
         <h3>Stock Price Data for {stockSymbol}</h3>
         {stockData.length > 0 ? <Line data={stockChartData} /> : <p>No stock data available</p>}
 
-        <h3 style={{ marginTop: '40px' }}>Options Cumulative Volume for Nearest Expiry</h3>
-        {putsVolumes.length > 0 || callsVolumes.length > 0 ? (
-          <Bar data={optionsVolumeChartData} />
-        ) : (
-          <p>No cumulative volume data available</p>
-        )}
+        {/* Side-by-Side Layout for Puts and Calls */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px' }}>
+          <div style={{ width: '48%' }}>
+            <h3>Puts Volume by Strike Price</h3>
+            {putsVolumes.length > 0 ? (
+              <Bar data={putsVolumeChartData} />
+            ) : (
+              <p>No puts volume data available</p>
+            )}
+          </div>
+          <div style={{ width: '48%' }}>
+            <h3>Calls Volume by Strike Price</h3>
+            {callsVolumes.length > 0 ? (
+              <Bar data={callsVolumeChartData} />
+            ) : (
+              <p>No calls volume data available</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
